@@ -1,0 +1,4 @@
+﻿{
+  "sourceUrl": "https://api.coinone.co.kr/ticker?currency=all",
+  "updateInterval": "300"
+}

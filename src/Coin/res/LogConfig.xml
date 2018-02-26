@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<log4net>
+  <appender name="exlog" type="log4net.Appender.RollingFileAppender">
+    <file value=".\log\" />
+    <datePattern value="yyyy-MM-dd '_exlog.log'" />
+    <staticLogFileName value="false" />
+    <appendToFile value="true" />
+    <rollingStyle value="Composite" />
+    <maxSizeRollBackups value="100" />
+    <layout type="log4net.Layout.PatternLayout">
+      <conversionPattern value = "%date{yyyy-MM-dd HH:mm:ss,fff} %-5level [%thread]:   %message%newline"/>
+    </layout>
+  </appender>
+  <logger name = "Logger">
+    <level value="Info" />
+    <appender-ref ref="exlog" />
+  </logger>
+</log4net>
