@@ -315,7 +315,7 @@ namespace Coin
 				    }
 
 				    var last = objData.Value.ToString();
-				    var price = Int64.Parse(last).ToString("N0");
+				    var price = Double.Parse(last).ToString("N1");
 				    Console.WriteLine($"currency: {currency}, price: {price}");
 
 				    PriceData.TryAdd(currency, price);
