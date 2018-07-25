@@ -23,7 +23,7 @@ namespace Coin
 		System.Timers.Timer _refreshSecTimer = new System.Timers.Timer(1000);
 		public static ConcurrentDictionary<String, String> PriceData = new ConcurrentDictionary<string, string>();
 
-        static String[] _filters = { "btcusd", "btc", "eth", "bch", "ltc", "xrp", "iota", "etc", "qtum", "eos", "tron" };
+        static String[] _filters = { "btcusd", "btc", "eth", "bch", "ltc", "xrp", "iota", "etc", "qtum", "eos", "trx" };
         static String _sourceUrl = "https://api.coinone.co.kr/ticker?currency=all";
         static Int32 _updateInterval = 5 * 60 * 1000;
         const Int32 MIN_INTERVAL_SEC = 30;
@@ -199,7 +199,7 @@ namespace Coin
 
         static void GetPrice()
         {
-	        Parallel.ForEach(new List<Action> { GetPriceElse, GetPriceEos, GetPriceTron, GetPriceBtcUsd },
+	        Parallel.ForEach(new List<Action> { GetPriceElse, GetPriceTron, GetPriceBtcUsd },
 	                         (getPrice) => { getPrice(); });
         }
 
@@ -231,7 +231,7 @@ namespace Coin
 					var last = item["last"].ToString();
 
 					var price = Int64.Parse(last).ToString("N0");
-					Console.WriteLine($"currency: {currency}, price: {price}");
+					Console.WriteLine($@"currency: {currency}, price: {price}");
 
 					PriceData.TryAdd(currency.ToUpper(), price);
 				}
@@ -242,14 +242,14 @@ namespace Coin
 			}
 		}
 
-		// 이오스 조회 전용.
-		static void GetPriceEos()
+	    // 트론 조회 전용.
+		static void GetPriceTron()
 		{
-			const String currency = "EOS";
+			const String currency = "TRX";
 
 			try
 			{
-				WebRequest request = WebRequest.Create("https://api.bithumb.com/public/ticker/eos");
+				WebRequest request = WebRequest.Create("https://api.bithumb.com/public/ticker/trx");
 				request.Credentials = CredentialCache.DefaultCredentials;
 
 				WebResponse response = request.GetResponse();
@@ -285,8 +285,7 @@ namespace Coin
 			}
 		}
 
-	    // 트론 조회 전용.
-	    static void GetPriceTron()
+	    static void GetPriceTron_()
 	    {
 		    const String currency = "TRON";
 
@@ -351,7 +350,7 @@ namespace Coin
 
 				var last = res.Replace("[", "").Replace("]", "").Split(',')[0];
 				var price = Double.Parse(last).ToString("N0");
-				Console.WriteLine($"currency: {currency}, price: {price}");
+				Console.WriteLine($@"currency: {currency}, price: {price}");
 
 				PriceData.TryAdd(currency, price);
 			}
