@@ -28,7 +28,7 @@ namespace Coin
         static Int32 _updateInterval = 5 * 60 * 1000;
         const Int32 MIN_INTERVAL_SEC = 30;
 
-	    System.Timers.Timer _exchangeRateTimer = new System.Timers.Timer(10000);
+	    System.Timers.Timer _exchangeRateTimer = new System.Timers.Timer(60000);
 		private static Double _exchangeRateUSDKRW = 0;
 	    private static Double _BTCUSD = 0;
 
