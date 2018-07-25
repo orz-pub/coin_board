@@ -23,12 +23,16 @@ namespace Coin
 		System.Timers.Timer _refreshSecTimer = new System.Timers.Timer(1000);
 		public static ConcurrentDictionary<String, String> PriceData = new ConcurrentDictionary<string, string>();
 
-        static String[] _filters = { "btcusd", "btc", "eth", "bch", "ltc", "xrp", "iota", "etc", "qtum", "eos", "trx" };
+        static readonly String[] _filters = { "btcusd", "btc", "BTCKRP", "eth", "bch", "ltc", "xrp", "iota", "etc", "qtum", "eos", "trx" };
         static String _sourceUrl = "https://api.coinone.co.kr/ticker?currency=all";
         static Int32 _updateInterval = 5 * 60 * 1000;
         const Int32 MIN_INTERVAL_SEC = 30;
 
-        public FormMain()
+	    System.Timers.Timer _exchangeRateTimer = new System.Timers.Timer(10000);
+		private static Double _exchangeRateUSDKRW = 0;
+	    private static Double _BTCUSD = 0;
+
+		public FormMain()
         {
             InitializeComponent();
 
@@ -52,11 +56,19 @@ namespace Coin
 					SetText(remainSeconds, secInt + "s");
 					if (_viewMode == 1)
 					{
-						SetText(time, String.Format("{0:HH:mm:ss}", DateTime.Now));
+						SetText(time, $"{DateTime.Now:HH:mm:ss}");
 					}
 				};
 				_refreshSecTimer.Start();
 
+	            _exchangeRateTimer.Elapsed += (object sender, ElapsedEventArgs e) =>
+	            {
+		            UpdateExchangeRate();
+	            };
+	            _refreshSecTimer.Start();
+
+	            GetPriceBtcUsd();
+				UpdateExchangeRate();
 				GetPrice();
                 UpdateServerObjectData();
 			}
@@ -116,7 +128,7 @@ namespace Coin
 							columnHeaderKind.Text = "Currency";
 						}
 					}
-					Console.WriteLine($"sourceUrl: {sourceUrl}, updateInterval: {updateInterval}");
+					Console.WriteLine($@"sourceUrl: {sourceUrl}, updateInterval: {updateInterval}");
 
                     if (sourceUrl != null)
                     {
@@ -199,9 +211,44 @@ namespace Coin
 
         static void GetPrice()
         {
-	        Parallel.ForEach(new List<Action> { GetPriceElse, GetPriceTron, GetPriceBtcUsd },
+	        Parallel.ForEach(new List<Action> { UpdateExchangeRate, GetPriceElse, GetPriceTron, GetPriceBtcUsd },
 	                         (getPrice) => { getPrice(); });
         }
+
+	    static void UpdateExchangeRate()
+	    {
+			try
+			{
+				WebRequest request = WebRequest.Create("http://earthquake.kr/exchange/");
+				request.Credentials = CredentialCache.DefaultCredentials;
+
+				WebResponse response = request.GetResponse();
+				//Console.WriteLine(((HttpWebResponse)response).StatusDescription);
+
+				Stream dataStream = response.GetResponseStream();
+				StreamReader reader = new StreamReader(dataStream);
+				String res = reader.ReadToEnd();
+				//Console.WriteLine(res);
+
+				reader.Close();
+				response.Close();
+
+				var objJson = JObject.Parse(res);
+				foreach (var objData in objJson)
+				{
+					if (String.CompareOrdinal("USDKRW", objData.Key) != 0)
+					{
+						continue;
+					}
+
+					_exchangeRateUSDKRW = Double.Parse(objData.Value[0].ToString());
+				}
+			}
+			catch (Exception ex)
+			{
+				Program.Log(LogType.Error, ex.ToString());
+			}
+		}
 
 		static void GetPriceElse()
 		{
@@ -232,6 +279,30 @@ namespace Coin
 
 					var price = Int64.Parse(last).ToString("N0");
 					Console.WriteLine($@"currency: {currency}, price: {price}");
+
+					if (String.CompareOrdinal("btc", currency) == 0)
+					{
+						Double korPrice = Int64.Parse(last);
+						Double overseasPrice = (Int64)(_BTCUSD * _exchangeRateUSDKRW);
+
+						Double premium = 0;
+						String sign = "";
+
+						// 김프.
+						if (overseasPrice < korPrice)
+						{
+							premium = ((korPrice / overseasPrice) - 1) * 100;
+							sign = "+";
+						}
+						// 역프.
+						else if (overseasPrice > korPrice)
+						{
+							premium = ((overseasPrice / korPrice) - 1) * 100;
+							sign = "-";
+						}
+
+						PriceData.TryAdd("BTCKRP", $"{sign}{Math.Round(premium, 2)}%");
+					}
 
 					PriceData.TryAdd(currency.ToUpper(), price);
 				}
@@ -349,7 +420,8 @@ namespace Coin
 				response.Close();
 
 				var last = res.Replace("[", "").Replace("]", "").Split(',')[0];
-				var price = Double.Parse(last).ToString("N0");
+				_BTCUSD = Double.Parse(last);
+				var price = _BTCUSD.ToString("N0");
 				Console.WriteLine($@"currency: {currency}, price: {price}");
 
 				PriceData.TryAdd(currency, price);
