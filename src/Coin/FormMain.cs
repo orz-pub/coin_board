@@ -31,7 +31,6 @@ namespace Coin
 
 	    System.Timers.Timer _exchangeRateTimer = new System.Timers.Timer(60000);
 		private static Double _exchangeRateUSDKRW = 0;
-	    private static Double _BTCUSD = 0;
 
 	    static readonly String[] _bitfinexCurrencies = { "btc", "eth", "bch", "ltc", "xrp", "iot", "etc", "qtm", "eos", "trx" };
 		static readonly ConcurrentDictionary<String, String> _bitfinexPrices = new ConcurrentDictionary<String, String>();
@@ -182,15 +181,15 @@ namespace Coin
 
                 ListViewItem lvi = new ListViewItem(key);
 
-	            String price = value;
+				String price = value;
 	            if (_premiums.ContainsKey(key))
 	            {
-		            price += $" ({_premiums[key]})";
+		            price += $"({_premiums[key]})";
 	            }
 
-                lvi.SubItems.Add(price);
+				lvi.SubItems.Add(price);
 
-                if (listView.InvokeRequired == true)
+				if (listView.InvokeRequired == true)
                 {
                     listView.Invoke(new MethodInvoker(delegate
                     {
@@ -448,7 +447,7 @@ namespace Coin
 			{
 				if (_bitfinexPrices.ContainsKey("btc"))
 				{
-					KorPrices.TryAdd(currency, _bitfinexPrices["btc"]);
+					KorPrices.TryAdd(currency, Double.Parse(_bitfinexPrices["btc"]).ToString("N1"));
 					return;
 				}
 
@@ -467,8 +466,7 @@ namespace Coin
 				response.Close();
 
 				var last = res.Replace("[", "").Replace("]", "").Split(',')[0];
-				_BTCUSD = Double.Parse(last);
-				var price = _BTCUSD.ToString("N0");
+				var price = Double.Parse(last).ToString("N1");
 				Console.WriteLine($@"currency: {currency}, price: {price}");
 
 				KorPrices.TryAdd(currency, price);

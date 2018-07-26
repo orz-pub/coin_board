@@ -48,7 +48,7 @@
 			this.listView.HeaderStyle = System.Windows.Forms.ColumnHeaderStyle.Nonclickable;
 			this.listView.Location = new System.Drawing.Point(0, 0);
 			this.listView.Name = "listView";
-			this.listView.Size = new System.Drawing.Size(150, 205);
+			this.listView.Size = new System.Drawing.Size(180, 205);
 			this.listView.TabIndex = 0;
 			this.listView.UseCompatibleStateImageBehavior = false;
 			this.listView.View = System.Windows.Forms.View.Details;
@@ -60,9 +60,9 @@
 			// 
 			// columnHeaderPrice
 			// 
-			this.columnHeaderPrice.Text = "Price";
+			this.columnHeaderPrice.Text = "Price(KRP)";
 			this.columnHeaderPrice.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
-			this.columnHeaderPrice.Width = 80;
+			this.columnHeaderPrice.Width = 110;
 			// 
 			// remainSeconds
 			// 
@@ -85,7 +85,7 @@
 			// 
 			this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 12F);
 			this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-			this.ClientSize = new System.Drawing.Size(150, 205);
+			this.ClientSize = new System.Drawing.Size(180, 205);
 			this.Controls.Add(this.time);
 			this.Controls.Add(this.remainSeconds);
 			this.Controls.Add(this.listView);
