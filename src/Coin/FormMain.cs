@@ -5,9 +5,10 @@ using System.Timers;
 using System.Collections.Concurrent;
 using System.Net;
 using System.IO;
+using System.Linq;
 using Newtonsoft.Json.Linq;
 using System.Text.RegularExpressions;
-
+using System.Threading;
 
 namespace Coin
 {
@@ -21,9 +22,9 @@ namespace Coin
 		Int32 _viewMode = 0;
 		System.Timers.Timer _timer = new System.Timers.Timer();
 		System.Timers.Timer _refreshSecTimer = new System.Timers.Timer(1000);
-		public static ConcurrentDictionary<String, String> PriceData = new ConcurrentDictionary<string, string>();
+		public static ConcurrentDictionary<String, String> KorPrices = new ConcurrentDictionary<string, string>();
 
-        static readonly String[] _filters = { "btcusd", "btc", "BTCKRP", "eth", "bch", "ltc", "xrp", "iota", "etc", "qtum", "eos", "trx" };
+		static readonly String[] _columnNames = { "btcusd", "btc", "eth", "bch", "ltc", "xrp", "iota", "etc", "qtum", "eos", "trx" };
         static String _sourceUrl = "https://api.coinone.co.kr/ticker?currency=all";
         static Int32 _updateInterval = 5 * 60 * 1000;
         const Int32 MIN_INTERVAL_SEC = 30;
@@ -31,6 +32,10 @@ namespace Coin
 	    System.Timers.Timer _exchangeRateTimer = new System.Timers.Timer(60000);
 		private static Double _exchangeRateUSDKRW = 0;
 	    private static Double _BTCUSD = 0;
+
+	    static readonly String[] _bitfinexCurrencies = { "btc", "eth", "bch", "ltc", "xrp", "iot", "etc", "qtm", "eos", "trx" };
+		static readonly ConcurrentDictionary<String, String> _bitfinexPrices = new ConcurrentDictionary<String, String>();
+	    static readonly ConcurrentDictionary<String, String> _premiums = new ConcurrentDictionary<String, String>();
 
 		public FormMain()
         {
@@ -67,10 +72,11 @@ namespace Coin
 	            };
 	            _refreshSecTimer.Start();
 
-	            GetPriceBtcUsd();
-				UpdateExchangeRate();
+	            UpdateExchangeRate();
+				GetPriceBitfinex();
 				GetPrice();
-                UpdateServerObjectData();
+	            CalcPremium();
+				UpdateServerObjectData();
 			}
             catch (Exception ex)
             {
@@ -167,15 +173,22 @@ namespace Coin
                 listView.Items.Clear();
             }
 
-            foreach (var filter in _filters)
+            foreach (var filter in _columnNames)
             {
                 var key = filter.ToUpper();
 
-                var value = PriceData[key];
+                var value = KorPrices[key];
                 if (value == null) continue;
 
                 ListViewItem lvi = new ListViewItem(key);
-                lvi.SubItems.Add(value.ToString());
+
+	            String price = value;
+	            if (_premiums.ContainsKey(key))
+	            {
+		            price += $" ({_premiums[key]})";
+	            }
+
+                lvi.SubItems.Add(price);
 
                 if (listView.InvokeRequired == true)
                 {
@@ -198,9 +211,11 @@ namespace Coin
             try
             {
                 var formMain = (FormMain)Application.OpenForms["FormMain"];
-                PriceData.Clear();
+                KorPrices.Clear();
 
-                GetPrice();
+	            GetPriceBitfinex();
+				GetPrice();
+				CalcPremium();
                 formMain?.UpdateServerObjectData();
             }
             catch (Exception ex)
@@ -214,6 +229,59 @@ namespace Coin
 	        Parallel.ForEach(new List<Action> { UpdateExchangeRate, GetPriceElse, GetPriceTron, GetPriceBtcUsd },
 	                         (getPrice) => { getPrice(); });
         }
+
+	    static void CalcPremium()
+	    {
+			foreach (var bitfinexCurrency in _bitfinexCurrencies)
+		    {
+			    String korCurrency = bitfinexCurrency;
+			    if (String.CompareOrdinal(korCurrency, "iot") == 0)
+			    {
+				    korCurrency = "iota";
+			    }
+			    else if (String.CompareOrdinal(korCurrency, "qtm") == 0)
+			    {
+				    korCurrency = "qtum";
+			    }
+
+			    korCurrency = korCurrency.ToUpper();
+				
+				if (KorPrices.ContainsKey(korCurrency) == false)
+			    {
+				    continue;
+			    }
+
+				try
+			    {
+				    Double korPrice = Double.Parse(KorPrices[korCurrency]);
+				    Double bitfinexPrice = Double.Parse(_bitfinexPrices[bitfinexCurrency]);
+				    Double overseasPrice = (Int64)(bitfinexPrice * _exchangeRateUSDKRW);
+
+				    Double premium = 0;
+				    String sign = "";
+
+				    // 김프.
+				    if (overseasPrice < korPrice)
+				    {
+					    premium = ((korPrice / overseasPrice) - 1) * 100;
+					    sign = "+";
+				    }
+				    // 역프.
+				    else if (overseasPrice > korPrice)
+				    {
+					    premium = ((overseasPrice / korPrice) - 1) * 100;
+					    sign = "-";
+				    }
+
+				    _premiums.TryAdd(korCurrency, $"{sign}{Math.Round(premium, 2)}%");
+				}
+			    catch (Exception e)
+			    {
+				    _premiums.TryAdd(korCurrency, "-%");
+				    Console.WriteLine(e);
+				}
+		    }
+	    }
 
 	    static void UpdateExchangeRate()
 	    {
@@ -271,7 +339,7 @@ namespace Coin
 				var objJson = JObject.Parse(res);
 				foreach (var objData in objJson)
 				{
-					if (Array.Exists(_filters, element => element == objData.Key) == false) continue;
+					if (Array.Exists(_columnNames, element => element == objData.Key) == false) continue;
 
 					var item = objData.Value;
 					var currency = item["currency"].ToString();
@@ -280,31 +348,7 @@ namespace Coin
 					var price = Int64.Parse(last).ToString("N0");
 					Console.WriteLine($@"currency: {currency}, price: {price}");
 
-					if (String.CompareOrdinal("btc", currency) == 0)
-					{
-						Double korPrice = Int64.Parse(last);
-						Double overseasPrice = (Int64)(_BTCUSD * _exchangeRateUSDKRW);
-
-						Double premium = 0;
-						String sign = "";
-
-						// 김프.
-						if (overseasPrice < korPrice)
-						{
-							premium = ((korPrice / overseasPrice) - 1) * 100;
-							sign = "+";
-						}
-						// 역프.
-						else if (overseasPrice > korPrice)
-						{
-							premium = ((overseasPrice / korPrice) - 1) * 100;
-							sign = "-";
-						}
-
-						PriceData.TryAdd("BTCKRP", $"{sign}{Math.Round(premium, 2)}%");
-					}
-
-					PriceData.TryAdd(currency.ToUpper(), price);
+					KorPrices.TryAdd(currency.ToUpper(), price);
 				}
 			}
 			catch (Exception ex)
@@ -346,56 +390,53 @@ namespace Coin
 					var price = Int64.Parse(last).ToString("N0");
 					Console.WriteLine($"currency: {currency}, price: {price}");
 
-					PriceData.TryAdd(currency, price);
+					KorPrices.TryAdd(currency, price);
 				}
 			}
 			catch (Exception ex)
 			{
-				PriceData.TryAdd(currency, "-");
+				KorPrices.TryAdd(currency, "-");
 				Program.Log(LogType.Error, ex.ToString());
 			}
 		}
 
-	    static void GetPriceTron_()
+	    static void GetPriceBitfinex()
 	    {
-		    const String currency = "TRON";
-
-			try
+		    Parallel.ForEach(_bitfinexCurrencies, (currency) =>
 		    {
-			    WebRequest request = WebRequest.Create("https://api.coinnest.co.kr/api/pub/ticker?coin=tron");
-			    request.Credentials = CredentialCache.DefaultCredentials;
+				try
+				{
+					Int32 sleepMs = Array.FindIndex(_bitfinexCurrencies, (c) => String.CompareOrdinal(c, currency) == 0);
+					Thread.Sleep(sleepMs * 50);
 
-			    WebResponse response = request.GetResponse();
-			    //Console.WriteLine(((HttpWebResponse)response).StatusDescription);
+					// Console.WriteLine($"t{currency.ToUpper()}USD");
 
-			    Stream dataStream = response.GetResponseStream();
-			    StreamReader reader = new StreamReader(dataStream);
-			    String res = reader.ReadToEnd();
-			    //Console.WriteLine(res);
+					WebRequest request = WebRequest.Create($"https://api.bitfinex.com/v2/ticker/t{currency.ToUpper()}USD");
+					request.Credentials = CredentialCache.DefaultCredentials;
 
-			    reader.Close();
-			    response.Close();
+					WebResponse response = request.GetResponse();
+					//Console.WriteLine(((HttpWebResponse)response).StatusDescription);
 
-			    var objJson = JObject.Parse(res);
-			    foreach (var objData in objJson)
-			    {
-				    if (String.Compare(objData.Key, "last") != 0)
-				    {
-					    continue;
-				    }
+					Stream dataStream = response.GetResponseStream();
+					StreamReader reader = new StreamReader(dataStream);
+					String res = reader.ReadToEnd();
 
-				    var last = objData.Value.ToString();
-				    var price = Double.Parse(last).ToString("N1");
-				    Console.WriteLine($"currency: {currency}, price: {price}");
+					// Console.WriteLine(res);
 
-				    PriceData.TryAdd(currency, price);
-			    }
-		    }
-		    catch (Exception ex)
-		    {
-			    PriceData.TryAdd(currency, "-");
-				Program.Log(LogType.Error, ex.ToString());
-		    }
+					reader.Close();
+					response.Close();
+
+					var last = res.Replace("[", "").Replace("]", "").Split(',')[0];
+					var price = Double.Parse(last).ToString();
+					Console.WriteLine($@"bitfinex currency: {currency}, price: {price}");
+
+					_bitfinexPrices.AddOrUpdate(currency, price, (key, oldValue) => price);
+				}
+				catch (Exception ex)
+				{
+					Program.Log(LogType.Error, ex.ToString());
+				}
+			});
 	    }
 
 		// 해외 비트코인 조회 전용.
@@ -405,6 +446,12 @@ namespace Coin
 
 			try
 			{
+				if (_bitfinexPrices.ContainsKey("btc"))
+				{
+					KorPrices.TryAdd(currency, _bitfinexPrices["btc"]);
+					return;
+				}
+
 				WebRequest request = WebRequest.Create("https://api.bitfinex.com/v2/ticker/tBTCUSD");
 				request.Credentials = CredentialCache.DefaultCredentials;
 
@@ -424,11 +471,11 @@ namespace Coin
 				var price = _BTCUSD.ToString("N0");
 				Console.WriteLine($@"currency: {currency}, price: {price}");
 
-				PriceData.TryAdd(currency, price);
+				KorPrices.TryAdd(currency, price);
 			}
 			catch (Exception ex)
 			{
-				PriceData.TryAdd(currency, "-");
+				KorPrices.TryAdd(currency, "-");
 				Program.Log(LogType.Error, ex.ToString());
 			}
 		}
